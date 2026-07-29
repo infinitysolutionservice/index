@@ -1,0 +1,46 @@
+{
+  "name": "aina-facturation",
+  "version": "1.0.0",
+  "description": "Application de facturation AINA - logiciel de bureau hors ligne avec base de donnees locale SQLite",
+  "main": "main.js",
+  "private": true,
+  "author": "AINA",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.aina.facturation",
+    "productName": "AINA Facturation",
+    "files": [
+      "**/*",
+      "!backups/**",
+      "!dist/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

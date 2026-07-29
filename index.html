@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AINA — Facturation</title>
+<!-- html2canvas / jspdf / xlsx sont désormais chargés localement (hors ligne)
+     par preload.js sur window.html2canvas / window.jspdf / window.XLSX -->
+
+<style>
+:root{
+  --ink:#1f2f45;
+  --ink-2:#2c4363;
+  --ink-soft:#496788;
+  --brass:#a9812f;
+  --brass-light:#c9a35a;
+  --brass-pale:#efe4c9;
+  --paper:#faf8f4;
+  --paper-2:#f1ede3;
+  --line:#ddd5c3;
+  --text:#262420;
+  --text-muted:#75705f;
+  --success:#3f6e4e;
+  --success-bg:#e5efe6;
+  --danger:#a3402a;
+  --danger-bg:#f6e6e0;
+  --warning:#a1741f;
+  --warning-bg:#f6ecd6;
+  --sidebar-w:236px;
+  --serif: Georgia, 'Palatino Linotype', 'Book Antiqua', 'Iowan Old Style', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'Consolas', 'Menlo', monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  font-family:var(--sans);
+  color:var(--text);
+  background:var(--paper-2);
+  -webkit-font-smoothing:antialiased;
+}
+#app{display:flex;min-height:100vh;}
+
+/* ---------- Sidebar ---------- */
+#sidebar{
+  width:var(--sidebar-w);
+  flex-shrink:0;
+  background:linear-gradient(180deg,var(--ink) 0%, var(--ink-2) 100%);
+  color:#e9edf3;
+  display:flex;
+  flex-direction:column;
+  padding:22px 14px;
+  position:sticky;
+  top:0;
+  height:100vh;
+  overflow-y:auto;
+}
+#sidebar .brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 10px 22px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.12);
+  margin-bottom:14px;
+}
+#sidebar .brand-logo{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--brass);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--serif);
+  font-weight:700;color:var(--ink);
+  font-size:15px;
+  overflow:hidden;
+  flex-shrink:0;
+}
+#sidebar .brand-logo img{width:100%;height:100%;object-fit:cover;}
+#sidebar .brand-text .name{font-family:var(--serif);font-size:15px;letter-spacing:0.02em;line-height:1.2;}
+#sidebar .brand-text .tag{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--brass-light);margin-top:2px;}
+.nav-group-label{
+  font-size:10px;text-transform:uppercase;letter-spacing:0.12em;
+  color:#8fa1ba; margin:16px 10px 6px 10px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;margin:1px 0;border-radius:8px;
+  cursor:pointer;font-size:13.5px;color:#d7dee8;
+  transition:background .12s ease, color .12s ease;
+  user-select:none;
+}
+.nav-item:hover{background:rgba(255,255,255,0.07);color:#fff;}
+.nav-item.active{background:var(--brass);color:var(--ink);font-weight:600;}
+.nav-item .ic{width:18px;text-align:center;font-size:14px;flex-shrink:0;}
+
+/* ---------- Main ---------- */
+#main{flex:1;min-width:0;padding:26px 34px 60px 34px;}
+.page-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+.page-head h1{font-family:var(--serif);font-size:25px;margin:0;color:var(--ink);}
+.page-head .sub{color:var(--text-muted);font-size:13px;margin-top:3px;}
+.btn{
+  border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+  transition:transform .08s ease, box-shadow .12s ease, background .12s ease;
+  font-family:var(--sans);
+}
+.btn:active{transform:translateY(1px);}
+.btn-brass{background:var(--brass);color:#fff;}
+.btn-brass:hover{background:var(--brass-light);}
+.btn-ink{background:var(--ink);color:#fff;}
+.btn-ink:hover{background:var(--ink-2);}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+.btn-ghost:hover{background:var(--paper-2);}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+.btn-danger:hover{background:var(--danger-bg);}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:18px;}
+.card h2{font-family:var(--serif);font-size:16px;margin:0 0 14px 0;color:var(--ink);}
+.grid{display:grid;gap:14px;}
+.grid-2{grid-template-columns:1fr 1fr;}
+.grid-3{grid-template-columns:1fr 1fr 1fr;}
+label{display:block;font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+input[type=text],input[type=number],input[type=email],input[type=date],input[type=tel],select,textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;
+  font-family:var(--sans);color:var(--text);background:#fff;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px var(--brass-pale);}
+textarea{resize:vertical;min-height:60px;}
+.field{margin-bottom:0;}
+.hint{font-size:11.5px;color:var(--text-muted);margin-top:4px;}
+
+table.data{width:100%;border-collapse:collapse;font-size:13px;}
+table.data th{
+  text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-muted);padding:8px 10px;border-bottom:2px solid var(--line);font-weight:700;
+}
+table.data td{padding:9px 10px;border-bottom:1px solid var(--paper-2);vertical-align:middle;}
+table.data tr:hover td{background:var(--paper-2);}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.02em;}
+.badge-brouillon{background:#eee;color:#666;}
+.badge-envoyee{background:var(--warning-bg);color:var(--warning);}
+.badge-payee{background:var(--success-bg);color:var(--success);}
+.badge-impayee{background:var(--danger-bg);color:var(--danger);}
+.icon-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:4px 6px;border-radius:5px;color:var(--ink-soft);}
+.icon-btn:hover{background:var(--paper-2);}
+.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);}
+.empty-state .big{font-size:34px;margin-bottom:10px;}
+
+/* stat cards */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden;}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--brass);}
+.stat .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
+.stat .value{font-family:var(--serif);font-size:24px;color:var(--ink);margin-top:4px;}
+
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(31,47,69,0.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+.modal{background:#fff;border-radius:12px;max-width:480px;width:100%;padding:24px 26px;max-height:88vh;overflow-y:auto;}
+.modal h3{font-family:var(--serif);margin:0 0 16px 0;color:var(--ink);font-size:18px;}
+.modal .row-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+
+/* ---------- Invoice workspace (split) ---------- */
+.workspace{display:grid;grid-template-columns:minmax(360px,460px) 1fr;gap:20px;align-items:start;}
+@media (max-width:1100px){.workspace{grid-template-columns:1fr;}}
+.lines-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.lines-table th{font-size:10px;text-transform:uppercase;color:var(--text-muted);padding:6px 4px;text-align:left;border-bottom:1px solid var(--line);}
+.lines-table td{padding:4px 3px;vertical-align:middle;}
+.lines-table input{padding:6px 7px;font-size:12.5px;}
+.lines-table .qty-col{width:52px;}
+.lines-table .price-col{width:100px;}
+.lines-table .total-col{width:100px;color:var(--text-muted);font-family:var(--mono);}
+.lines-table .del-col{width:30px;}
+
+/* preview pane */
+.preview-wrap{background:#e9e4d6;border-radius:12px;padding:22px;display:flex;flex-direction:column;align-items:center;position:sticky;top:20px;}
+.preview-toolbar{display:flex;gap:8px;margin-bottom:14px;width:100%;justify-content:flex-end;flex-wrap:wrap;}
+.a4-shell{width:100%;max-width:560px;overflow:hidden;}
+#invoice-preview-page{
+  width:794px;min-height:1123px;background:#fff;margin:0 auto;
+  box-shadow:0 6px 24px rgba(0,0,0,0.18);
+  transform-origin:top left;
+  position:relative;
+  padding:46px 52px;
+  font-family:var(--serif);
+  color:#232019;
+}
+.zoom-scale{transform:scale(0.705);}
+
+/* Invoice document styling */
+.inv-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-32deg);font-size:90px;font-weight:700;color:#000;pointer-events:none;white-space:nowrap;z-index:0;}
+.inv-content{position:relative;z-index:1;}
+.inv-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px double var(--doc-ink,#1f2f45);padding-bottom:14px;margin-bottom:18px;}
+.inv-header .logo-block{display:flex;gap:12px;align-items:center;}
+.inv-header .logo-block img{max-height:70px;max-width:150px;object-fit:contain;}
+.inv-company-name{font-size:20px;font-weight:700;color:var(--doc-ink,#1f2f45);letter-spacing:.02em;}
+.inv-company-meta{font-size:10.5px;color:#5c584c;margin-top:3px;line-height:1.5;}
+.inv-meta-right{text-align:right;font-size:11px;color:#5c584c;}
+.inv-meta-right .num{font-family:var(--serif);font-size:15px;color:var(--doc-ink,#1f2f45);font-weight:700;margin-bottom:5px;letter-spacing:.03em;}
+.inv-seal-ring{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1.5px solid var(--doc-brass,#a9812f);border-radius:50%;font-size:9px;margin-right:5px;}
+.inv-title-row{display:flex;justify-content:space-between;margin:18px 0 14px 0;font-size:12px;}
+.inv-client-box{border:1px solid #ddd5c3;border-radius:6px;padding:10px 14px;max-width:280px;}
+.inv-client-box .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#8f8a78;margin-bottom:4px;}
+.inv-object{font-size:12.5px;margin:14px 0 16px 0;font-style:italic;color:#3a362d;}
+table.inv-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;}
+table.inv-table thead th{background:var(--doc-ink,#1f2f45);color:#fff;padding:8px 10px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;}
+table.inv-table thead th.num{text-align:right;}
+table.inv-table tbody td{padding:7px 10px;border-bottom:1px solid #eee7d6;}
+table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
+.inv-totals{display:flex;justify-content:flex-end;margin-bottom:16px;}
+.inv-totals table{border-collapse:collapse;font-size:12.5px;min-width:260px;}
+.inv-totals td{padding:5px 10px;}
+.inv-totals td.lbl{color:#5c584c;}
+.inv-totals td.val{text-align:right;font-family:var(--mono);}
+.inv-totals tr.ttc td{border-top:2px solid var(--doc-ink,#1f2f45);font-weight:700;font-size:14px;color:var(--doc-ink,#1f2f45);}
+.inv-words{border:1px dashed var(--doc-brass,#a9812f);border-radius:6px;padding:9px 13px;font-size:11.5px;font-style:italic;background:#fbf8ef;margin-bottom:26px;}
+.inv-sign{display:flex;justify-content:flex-end;margin-bottom:30px;}
+.inv-sign-box{text-align:center;font-size:11.5px;}
+.inv-sign-box .seal{width:64px;height:64px;border:2px solid var(--doc-brass,#a9812f);border-radius:50%;margin:8px auto 6px auto;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--doc-brass,#a9812f);text-transform:uppercase;letter-spacing:.05em;line-height:1.3;}
+.inv-footer{position:absolute;bottom:30px;left:52px;right:52px;border-top:1px solid #ddd5c3;padding-top:9px;font-size:9.5px;color:#8f8a78;text-align:center;}
+
+@media print{
+  body *{visibility:hidden;}
+  #invoice-preview-page, #invoice-preview-page *{visibility:visible;}
+  #invoice-preview-page{position:absolute;top:0;left:0;box-shadow:none;transform:none;}
+  #sidebar,#main>*{display:none;}
+}
+
+.color-swatch{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);cursor:pointer;display:inline-block;}
+.tab-strip{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);}
+.tab-strip .tab{padding:9px 14px;font-size:13px;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;font-weight:600;}
+.tab-strip .tab.active{color:var(--ink);border-color:var(--brass);}
+.pill-toggle{display:inline-flex;border:1px solid var(--line);border-radius:20px;overflow:hidden;}
+.pill-toggle span{padding:6px 14px;font-size:12px;cursor:pointer;color:var(--text-muted);font-weight:600;}
+.pill-toggle span.active{background:var(--ink);color:#fff;}
+.search-bar{display:flex;gap:10px;margin-bottom:14px;}
+.search-bar input{flex:1;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar"></div>
+  <div id="main"></div>
+</div>
+<div id="modal-root"></div>
+<script>
+/* ============================================================
+   AINA — Application de facturation
+   ============================================================ */
+const MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+
+function pad3(n){ return String(n).padStart(3,"0"); }
+function todayISO(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function fmtDateFR(iso){
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+function fmtFCFA(n){
+  n = Math.round(Number(n)||0);
+  return n.toLocaleString("fr-FR").replace(/\u202f|\u00a0/g," ") + " FCFA";
+}
+function fmtNum(n){
+  n = Math.round(Number(n)||0);
+  return n.toLocaleString("fr-FR").replace(/\u202f|\u00a0/g," ");
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* ---------- Conversion nombre -> lettres (français) ---------- */
+function unitesToWords(n, noPluralVingt) {
+  const unites = ["zéro","un","deux","trois","quatre","cinq","six","sept","huit","neuf","dix",
+    "onze","douze","treize","quatorze","quinze","seize","dix-sept","dix-huit","dix-neuf"];
+  const dizaines = ["","","vingt","trente","quarante","cinquante","soixante","soixante-dix","quatre-vingt","quatre-vingt-dix"];
+  if (n < 20) return unites[n];
+  if (n < 70) {
+    const d = Math.floor(n/10), u = n%10;
+    if (u === 0) return dizaines[d];
+    if (u === 1 && d !== 8) return dizaines[d] + "-et-un";
+    return dizaines[d] + "-" + unites[u];
+  }
+  if (n < 80) {
+    const u = n - 60;
+    if (u === 11) return "soixante-et-onze";
+    return "soixante-" + unites[u];
+  }
+  if (n < 100) {
+    const u = n - 80;
+    if (u === 0) return "quatre-vingt" + (noPluralVingt ? "" : "s");
+    return "quatre-vingt-" + unites[u];
+  }
+  return "";
+}
+function centainesToWords(n, noPluralFinal) {
+  if (n < 100) return unitesToWords(n, noPluralFinal);
+  const c = Math.floor(n/100), r = n%100;
+  let words = "";
+  if (c === 1) words = "cent";
+  else words = unitesToWords(c) + " cent" + (r === 0 && c > 1 && !noPluralFinal ? "s" : "");
+  if (r > 0) words += " " + unitesToWords(r, noPluralFinal && r === 80 ? true : false);
+  return words.trim();
+}
+function numberToWordsFR(num) {
+  num = Math.floor(Math.abs(Number(num)||0));
+  if (num === 0) return "zéro";
+  const groups = [];
+  let n = num;
+  while (n > 0) { groups.unshift(n % 1000); n = Math.floor(n / 1000); }
+  const scales = ["", "mille", "million", "milliard", "billion"];
+  const totalGroups = groups.length;
+  let parts = [];
+  for (let i = 0; i < totalGroups; i++) {
+    const groupVal = groups[i];
+    const scaleIndex = totalGroups - i - 1;
+    if (groupVal === 0) continue;
+    let groupWords;
+    if (scaleIndex === 1) {
+      groupWords = groupVal === 1 ? "mille" : centainesToWords(groupVal, true) + " mille";
+    } else if (scaleIndex >= 2) {
+      const scaleName = scales[scaleIndex];
+      const plural = groupVal > 1 ? "s" : "";
+      groupWords = centainesToWords(groupVal) + " " + scaleName + plural;
+    } else {
+      groupWords = centainesToWords(groupVal);
+    }
+    parts.push(groupWords);
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+function montantEnLettres(n){
+  n = Math.round(Number(n)||0);
+  const words = numberToWordsFR(n);
+  const cap = words.charAt(0).toUpperCase() + words.slice(1);
+  return `${cap} francs CFA`;
+}
+
+/* ============================================================
+   State & persistence
+   ============================================================ */
+const DEFAULT_SETTINGS = {
+  companyName: "AINA SECURITE SENEGAL",
+  logoDataUrl: "data:image/png;base64,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",
+  address: "Dakar, Sénégal",
+  phone: "",
+  email: "Ainasecurite33@gmail.com",
+  ninea: "0054840432J1",
+  arrete: "N°006094 (MINT/DGPN/BEM)",
+  bankInfo: "",
+  responsableName: "",
+  responsableFonction: "Président"
+};
+const DEFAULT_CUSTOM = {
+  primaryColor: "#1f2f45",
+  brassColor: "#a9812f",
+  font: "serif",
+  logoSize: 70,
+  logoPosition: "left",
+  watermarkEnabled: false,
+  watermarkText: "AINA SÉCURITÉ",
+  watermarkOpacity: 6,
+  watermarkSize: 90
+};
+const DEFAULT_TAX = {
+  tvaActiveDefault: false,
+  tvaTauxDefault: 18,
+  extraTemplates: []
+};
+
+const App = {
+  state: {
+    settings: {...DEFAULT_SETTINGS},
+    customization: {...DEFAULT_CUSTOM},
+    taxDefaults: {...DEFAULT_TAX},
+    clients: [],
+    prestations: [],
+    invoices: [],
+    counter: 0
+  },
+  view: "dashboard",
+  draft: null, // invoice being edited
+  invoiceListFilter: "",
+
+  async init(){
+    await this.loadAll();
+    this.renderSidebar();
+    this.goto("dashboard");
+  },
+
+  async loadAll(){
+    const keys = ["settings","customization","taxDefaults","clients","prestations","invoices","counter"];
+    for(const k of keys){
+      try{
+        const res = await window.storage.get(k, false);
+        if(res && res.value !== undefined){
+          this.state[k] = JSON.parse(res.value);
+        }
+      }catch(e){ /* key not found — keep default */ }
+    }
+  },
+  async save(key){
+    try{
+      await window.storage.set(key, JSON.stringify(this.state[key]), false);
+    }catch(e){ console.error("Erreur de sauvegarde", key, e); }
+  },
+
+  goto(view){
+    this.view = view;
+    this.draft = null;
+    this.renderSidebar();
+    this.renderView();
+    window.scrollTo(0,0);
+  }
+};
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+App.renderSidebar = function(){
+  const s = this.state.settings;
+  const items = [
+    {group:"Activité", items:[
+      {id:"dashboard", label:"Tableau de bord", ic:"◆"},
+      {id:"newInvoice", label:"Nouvelle facture", ic:"✎"},
+      {id:"invoices", label:"Mes factures", ic:"▤"}
+    ]},
+    {group:"Répertoire", items:[
+      {id:"clients", label:"Clients", ic:"◈"},
+      {id:"prestations", label:"Prestations & tarifs", ic:"✚"}
+    ]},
+    {group:"Configuration", items:[
+      {id:"settings", label:"Paramètres entreprise", ic:"⚙"},
+      {id:"customization", label:"Personnalisation", ic:"✦"},
+      {id:"taxes", label:"Taxes & TVA", ic:"%"}
+    ]},
+    {group:"Système", items:[
+      {id:"database", label:"Base de données & Sauvegarde", ic:"🗄"}
+    ]}
+  ];
+  let logoHtml = s.logoDataUrl ? `<img src="${s.logoDataUrl}">` : (s.companyName||"A").charAt(0);
+  let html = `
+    <div class="brand">
+      <div class="brand-logo">${logoHtml}</div>
+      <div class="brand-text">
+        <div class="name">${escapeHtml(s.companyName||"Mon entreprise")}</div>
+        <div class="tag">Facturation</div>
+      </div>
+    </div>`;
+  for(const grp of items){
+    html += `<div class="nav-group-label">${grp.group}</div>`;
+    for(const it of grp.items){
+      html += `<div class="nav-item ${this.view===it.id?'active':''}" onclick="App.goto('${it.id}')">
+        <span class="ic">${it.ic}</span>${it.label}
+      </div>`;
+    }
+  }
+  document.getElementById("sidebar").innerHTML = html;
+};
+
+function escapeHtml(str){
+  if(str===undefined||str===null) return "";
+  return String(str).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* ============================================================
+   View router
+   ============================================================ */
+App.renderView = function(){
+  const map = {
+    dashboard: this.renderDashboard,
+    newInvoice: this.renderInvoiceForm,
+    invoices: this.renderInvoiceList,
+    clients: this.renderClients,
+    prestations: this.renderPrestations,
+    settings: this.renderSettings,
+    customization: this.renderCustomization,
+    taxes: this.renderTaxes,
+    database: this.renderDatabaseSection
+  };
+  const fn = map[this.view] || this.renderDashboard;
+  fn.call(this);
+};
+
+/* ============================================================
+   Dashboard
+   ============================================================ */
+App.renderDashboard = function(){
+  const invs = this.state.invoices;
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${now.getMonth()+1}`;
+  let totalTTCmois = 0, impayees = 0, brouillons = 0, payees = 0;
+  let totalHTglobal = 0, totalTVAglobal = 0, totalTTCglobal = 0;
+  for(const inv of invs){
+    const t = computeTotals(inv);
+    if(String(inv.annee) === String(now.getFullYear()) && Number(inv.mois) === now.getMonth()+1){
+      totalTTCmois += t.ttc;
+    }
+    totalHTglobal += t.htva;
+    totalTVAglobal += t.tva;
+    totalTTCglobal += t.ttc;
+    if(inv.statut === "impayee") impayees++;
+    if(inv.statut === "brouillon") brouillons++;
+    if(inv.statut === "payee") payees++;
+  }
+  const recent = [...invs].sort((a,b)=> (b.dateCreation||"").localeCompare(a.dateCreation||"")).slice(0,6);
+
+  let rows = recent.map(inv=>{
+    const t = computeTotals(inv);
+    const client = this.state.clients.find(c=>c.id===inv.clientId);
+    return `<tr onclick="App.openInvoice('${inv.id}')" style="cursor:pointer">
+      <td><strong>N°${inv.numero}</strong></td>
+      <td>${escapeHtml(client?client.nom:"—")}</td>
+      <td>${fmtDateFR(inv.dateEmission)}</td>
+      <td class="num" style="text-align:right;font-family:var(--mono)">${fmtFCFA(t.ttc)}</td>
+      <td>${statusBadge(inv.statut)}</td>
+    </tr>`;
+  }).join("");
+  if(!recent.length){
+    rows = `<tr><td colspan="5"><div class="empty-state"><div class="big">🗂️</div>Aucune facture pour le moment.</div></td></tr>`;
+  }
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div>
+        <h1>Tableau de bord</h1>
+        <div class="sub">Vue d'ensemble de votre activité de facturation</div>
+      </div>
+      <button class="btn btn-brass" onclick="App.goto('newInvoice')">＋ Nouvelle facture</button>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="label">Total des factures</div><div class="value">${invs.length}</div></div>
+      <div class="stat"><div class="label">Total TTC — ${MOIS_FR[now.getMonth()]}</div><div class="value">${fmtFCFA(totalTTCmois)}</div></div>
+      <div class="stat"><div class="label">Factures payées</div><div class="value">${payees}</div></div>
+      <div class="stat"><div class="label">Factures impayées</div><div class="value">${impayees}</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="label">Total HT (toutes factures)</div><div class="value">${fmtFCFA(totalHTglobal)}</div></div>
+      <div class="stat"><div class="label">Total TVA (toutes factures)</div><div class="value">${fmtFCFA(totalTVAglobal)}</div></div>
+      <div class="stat"><div class="label">Total TTC (toutes factures)</div><div class="value">${fmtFCFA(totalTTCglobal)}</div></div>
+      <div class="stat"><div class="label">Factures en brouillon</div><div class="value">${brouillons}</div></div>
+    </div>
+    <div class="card">
+      <h2>Factures récentes</h2>
+      <table class="data">
+        <thead><tr><th>Numéro</th><th>Client</th><th>Date</th><th style="text-align:right">Total TTC</th><th>Statut</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+function statusBadge(statut){
+  const labels = {brouillon:"Brouillon", envoyee:"Envoyée", payee:"Payée", impayee:"Impayée"};
+  return `<span class="badge badge-${statut}">${labels[statut]||statut}</span>`;
+}
+
+function computeTotals(inv){
+  const lignes = inv.lignes||[];
+  let htva = 0;
+  for(const l of lignes){ htva += (Number(l.quantite)||0) * (Number(l.prixUnitaire)||0); }
+  let extra = 0;
+  for(const e of (inv.extraCharges||[])){
+    const amt = Number(e.amount)||0;
+    extra += e.type === "remise" ? -amt : amt;
+  }
+  const baseApresExtra = htva + extra;
+  const tva = inv.tvaActive ? baseApresExtra * (Number(inv.tvaTaux)||0)/100 : 0;
+  const ttc = baseApresExtra + tva;
+  return {htva, extra, tva, ttc: Math.round(ttc), baseApresExtra};
+}
+
+/* ============================================================
+   Clients
+   ============================================================ */
+App.renderClients = function(){
+  const clients = this.state.clients;
+  let rows = clients.map(c=>`
+    <tr>
+      <td><strong>${escapeHtml(c.nom)}</strong></td>
+      <td>${escapeHtml(c.responsable||"—")}</td>
+      <td>${escapeHtml(c.telephone||"—")}</td>
+      <td>${escapeHtml(c.email||"—")}</td>
+      <td>${escapeHtml(c.ninea||"—")}</td>
+      <td>
+        <button class="icon-btn" title="Modifier" onclick="App.openClientModal('${c.id}')">✎</button>
+        <button class="icon-btn" title="Supprimer" onclick="App.deleteClient('${c.id}')">🗑</button>
+      </td>
+    </tr>`).join("");
+  if(!clients.length) rows = `<tr><td colspan="6"><div class="empty-state"><div class="big">◈</div>Aucun client enregistré. Ajoutez votre premier client.</div></td></tr>`;
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div><h1>Clients</h1><div class="sub">Gérez les entreprises et personnes que vous facturez</div></div>
+      <button class="btn btn-brass" onclick="App.openClientModal()">＋ Nouveau client</button>
+    </div>
+    <div class="card">
+      <table class="data">
+        <thead><tr><th>Entreprise</th><th>Responsable</th><th>Téléphone</th><th>E-mail</th><th>NINEA</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+App.openClientModal = function(clientId){
+  const c = clientId ? this.state.clients.find(x=>x.id===clientId) : {id:"", nom:"", adresse:"", telephone:"", email:"", ninea:"", responsable:""};
+  const isNew = !clientId;
+  showModal(`
+    <h3>${isNew?"Nouveau client":"Modifier le client"}</h3>
+    <div class="grid" style="gap:12px;">
+      <div class="field"><label>Nom de l'entreprise / client</label><input type="text" id="cl-nom" value="${escapeAttr(c.nom)}"></div>
+      <div class="field"><label>Adresse</label><input type="text" id="cl-adresse" value="${escapeAttr(c.adresse)}"></div>
+      <div class="grid grid-2">
+        <div class="field"><label>Téléphone</label><input type="text" id="cl-tel" value="${escapeAttr(c.telephone)}"></div>
+        <div class="field"><label>E-mail</label><input type="email" id="cl-email" value="${escapeAttr(c.email)}"></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="field"><label>NINEA</label><input type="text" id="cl-ninea" value="${escapeAttr(c.ninea)}"></div>
+        <div class="field"><label>Personne responsable</label><input type="text" id="cl-resp" value="${escapeAttr(c.responsable)}"></div>
+      </div>
+    </div>
+    <div class="row-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-brass" onclick="App.saveClient('${c.id}')">Enregistrer</button>
+    </div>
+  `);
+};
+
+App.saveClient = function(clientId){
+  const data = {
+    nom: document.getElementById("cl-nom").value.trim(),
+    adresse: document.getElementById("cl-adresse").value.trim(),
+    telephone: document.getElementById("cl-tel").value.trim(),
+    email: document.getElementById("cl-email").value.trim(),
+    ninea: document.getElementById("cl-ninea").value.trim(),
+    responsable: document.getElementById("cl-resp").value.trim()
+  };
+  if(!data.nom){ alert("Le nom du client est requis."); return; }
+  if(clientId){
+    const idx = this.state.clients.findIndex(x=>x.id===clientId);
+    this.state.clients[idx] = {...this.state.clients[idx], ...data};
+  } else {
+    this.state.clients.push({id:uid(), ...data});
+  }
+  this.save("clients");
+  closeModal();
+  this.renderView();
+};
+
+App.deleteClient = function(clientId){
+  if(!confirm("Supprimer ce client ?")) return;
+  this.state.clients = this.state.clients.filter(c=>c.id!==clientId);
+  this.save("clients");
+  this.renderView();
+};
+
+/* ============================================================
+   Prestations & tarifs
+   ============================================================ */
+App.renderPrestations = function(){
+  const list = this.state.prestations;
+  let rows = list.map(p=>`
+    <tr>
+      <td><strong>${escapeHtml(p.designation)}</strong></td>
+      <td style="font-family:var(--mono)">${fmtFCFA(p.prixUnitaire)}</td>
+      <td>
+        <button class="icon-btn" title="Modifier" onclick="App.openPrestationModal('${p.id}')">✎</button>
+        <button class="icon-btn" title="Supprimer" onclick="App.deletePrestation('${p.id}')">🗑</button>
+      </td>
+    </tr>`).join("");
+  if(!list.length) rows = `<tr><td colspan="3"><div class="empty-state"><div class="big">✚</div>Aucune prestation enregistrée. Créez votre bibliothèque de tarifs habituels.</div></td></tr>`;
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div><h1>Prestations &amp; tarifs</h1><div class="sub">Votre bibliothèque de prestations réutilisables, prix libres et jamais figés</div></div>
+      <button class="btn btn-brass" onclick="App.openPrestationModal()">＋ Nouvelle prestation</button>
+    </div>
+    <div class="card">
+      <table class="data">
+        <thead><tr><th>Désignation</th><th>Prix unitaire</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+App.openPrestationModal = function(pid){
+  const p = pid ? this.state.prestations.find(x=>x.id===pid) : {id:"", designation:"", prixUnitaire:""};
+  showModal(`
+    <h3>${pid?"Modifier la prestation":"Nouvelle prestation"}</h3>
+    <div class="grid" style="gap:12px;">
+      <div class="field"><label>Désignation</label><input type="text" id="pr-designation" value="${escapeAttr(p.designation)}" placeholder="Ex : Agent de sécurité"></div>
+      <div class="field"><label>Prix unitaire (FCFA)</label><input type="number" id="pr-prix" value="${p.prixUnitaire||''}" placeholder="100000"></div>
+    </div>
+    <div class="row-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-brass" onclick="App.savePrestation('${p.id}')">Enregistrer</button>
+    </div>
+  `);
+};
+
+App.savePrestation = function(pid){
+  const designation = document.getElementById("pr-designation").value.trim();
+  const prixUnitaire = Number(document.getElementById("pr-prix").value)||0;
+  if(!designation){ alert("La désignation est requise."); return; }
+  if(pid){
+    const idx = this.state.prestations.findIndex(x=>x.id===pid);
+    this.state.prestations[idx] = {...this.state.prestations[idx], designation, prixUnitaire};
+  } else {
+    this.state.prestations.push({id:uid(), designation, prixUnitaire});
+  }
+  this.save("prestations");
+  closeModal();
+  this.renderView();
+};
+
+App.deletePrestation = function(pid){
+  if(!confirm("Supprimer cette prestation ?")) return;
+  this.state.prestations = this.state.prestations.filter(p=>p.id!==pid);
+  this.save("prestations");
+  this.renderView();
+};
+
+/* ============================================================
+   Modal helpers
+   ============================================================ */
+function showModal(innerHtml){
+  document.getElementById("modal-root").innerHTML = `
+    <div class="modal-overlay" onmousedown="if(event.target===this) closeModal()">
+      <div class="modal">${innerHtml}</div>
+    </div>`;
+}
+function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
+function escapeAttr(str){ return escapeHtml(str).replace(/\n/g," "); }
+
+/* ============================================================
+   Paramètres entreprise
+   ============================================================ */
+App.renderSettings = function(){
+  const s = this.state.settings;
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div><h1>Paramètres de l'entreprise</h1><div class="sub">Ces informations apparaissent automatiquement sur chaque nouvelle facture</div></div>
+    </div>
+    <div class="card">
+      <h2>Logo</h2>
+      <div style="display:flex;align-items:center;gap:18px;">
+        <div id="logo-preview" style="width:90px;height:90px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--paper-2);">
+          ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" style="max-width:100%;max-height:100%;object-fit:contain;">` : `<span style="color:var(--text-muted);font-size:11px;">Aucun logo</span>`}
+        </div>
+        <div>
+          <input type="file" id="logo-input" accept=".png,.jpg,.jpeg,.svg" style="display:none" onchange="App.handleLogoUpload(event)">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('logo-input').click()">Modifier le logo</button>
+          ${s.logoDataUrl ? `<button class="btn btn-danger btn-sm" onclick="App.removeLogo()">Supprimer</button>` : ""}
+          <div class="hint">PNG, JPG, JPEG ou SVG. Taille et position réglables dans « Personnalisation ».</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Identité de l'entreprise</h2>
+      <div class="grid" style="gap:14px;">
+        <div class="field"><label>Nom de l'entreprise</label><input type="text" id="st-name" value="${escapeAttr(s.companyName)}"></div>
+        <div class="field"><label>Adresse</label><input type="text" id="st-address" value="${escapeAttr(s.address)}"></div>
+        <div class="grid grid-2">
+          <div class="field"><label>Téléphone</label><input type="text" id="st-phone" value="${escapeAttr(s.phone)}"></div>
+          <div class="field"><label>E-mail</label><input type="email" id="st-email" value="${escapeAttr(s.email)}"></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="field"><label>NINEA</label><input type="text" id="st-ninea" value="${escapeAttr(s.ninea)}"></div>
+          <div class="field"><label>Arrêté ministériel</label><input type="text" id="st-arrete" value="${escapeAttr(s.arrete)}"></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="field"><label>Nom du responsable</label><input type="text" id="st-respnom" value="${escapeAttr(s.responsableName)}"></div>
+          <div class="field"><label>Fonction du responsable</label><input type="text" id="st-respfonction" value="${escapeAttr(s.responsableFonction)}"></div>
+        </div>
+        <div class="field"><label>Coordonnées bancaires (optionnel)</label><textarea id="st-bank">${escapeHtml(s.bankInfo)}</textarea></div>
+      </div>
+      <div style="margin-top:16px;"><button class="btn btn-brass" onclick="App.saveSettings()">Enregistrer les paramètres</button></div>
+    </div>
+  `;
+};
+
+App.handleLogoUpload = function(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    this.state.settings.logoDataUrl = reader.result;
+    this.save("settings");
+    this.renderView();
+    this.renderSidebar();
+  };
+  reader.readAsDataURL(file);
+};
+App.removeLogo = function(){
+  this.state.settings.logoDataUrl = "";
+  this.save("settings");
+  this.renderView();
+  this.renderSidebar();
+};
+App.saveSettings = function(){
+  const s = this.state.settings;
+  s.companyName = document.getElementById("st-name").value.trim();
+  s.address = document.getElementById("st-address").value.trim();
+  s.phone = document.getElementById("st-phone").value.trim();
+  s.email = document.getElementById("st-email").value.trim();
+  s.ninea = document.getElementById("st-ninea").value.trim();
+  s.arrete = document.getElementById("st-arrete").value.trim();
+  s.responsableName = document.getElementById("st-respnom").value.trim();
+  s.responsableFonction = document.getElementById("st-respfonction").value.trim();
+  s.bankInfo = document.getElementById("st-bank").value.trim();
+  this.save("settings");
+  this.renderSidebar();
+  toast("Paramètres enregistrés");
+};
+
+/* ============================================================
+   Personnalisation
+   ============================================================ */
+App.renderCustomization = function(){
+  const c = this.state.customization;
+  const swatches = ["#1f2f45","#0f3d2e","#5a1f1f","#2e2a4a","#3a3a3a","#1f4a5a"];
+  const brassSwatches = ["#a9812f","#b0752e","#7f8c3f","#8a6d9e","#4a7a5c","#a3402a"];
+  document.getElementById("main").innerHTML = `
+    <div class="page-head"><div><h1>Personnalisation du modèle</h1><div class="sub">Ajustez l'apparence de vos factures — l'aperçu se met à jour dans « Nouvelle facture »</div></div></div>
+    <div class="card">
+      <h2>Couleurs</h2>
+      <label>Couleur principale (en-têtes, titres)</label>
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        ${swatches.map(sw=>`<span class="color-swatch" style="background:${sw};${c.primaryColor===sw?'box-shadow:0 0 0 3px var(--brass-pale);':''}" onclick="App.setCustom('primaryColor','${sw}')"></span>`).join("")}
+        <input type="text" value="${c.primaryColor}" style="width:100px" onchange="App.setCustom('primaryColor', this.value)">
+      </div>
+      <label>Couleur d'accent (liserés, cachet, sceau)</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${brassSwatches.map(sw=>`<span class="color-swatch" style="background:${sw};${c.brassColor===sw?'box-shadow:0 0 0 3px var(--brass-pale);':''}" onclick="App.setCustom('brassColor','${sw}')"></span>`).join("")}
+        <input type="text" value="${c.brassColor}" style="width:100px" onchange="App.setCustom('brassColor', this.value)">
+      </div>
+    </div>
+    <div class="card">
+      <h2>Typographie</h2>
+      <div class="pill-toggle">
+        <span class="${c.font==='serif'?'active':''}" onclick="App.setCustom('font','serif')">Sérif (classique)</span>
+        <span class="${c.font==='sans'?'active':''}" onclick="App.setCustom('font','sans')">Sans-serif (moderne)</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Logo</h2>
+      <div class="grid grid-2">
+        <div class="field"><label>Taille (px de hauteur) : ${c.logoSize}</label><input type="range" min="30" max="120" value="${c.logoSize}" oninput="App.setCustom('logoSize', this.value, true)"></div>
+        <div class="field"><label>Position</label>
+          <div class="pill-toggle">
+            <span class="${c.logoPosition==='left'?'active':''}" onclick="App.setCustom('logoPosition','left')">Gauche</span>
+            <span class="${c.logoPosition==='center'?'active':''}" onclick="App.setCustom('logoPosition','center')">Centre</span>
+            <span class="${c.logoPosition==='right'?'active':''}" onclick="App.setCustom('logoPosition','right')">Droite</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Filigrane</h2>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
+        <input type="checkbox" style="width:auto" ${c.watermarkEnabled?'checked':''} onchange="App.setCustom('watermarkEnabled', this.checked, true)"> Activer le filigrane
+      </label>
+      <div class="grid grid-3" style="margin-top:12px;">
+        <div class="field"><label>Texte</label><input type="text" value="${escapeAttr(c.watermarkText)}" onchange="App.setCustom('watermarkText', this.value)"></div>
+        <div class="field"><label>Opacité : ${c.watermarkOpacity}%</label><input type="range" min="2" max="30" value="${c.watermarkOpacity}" oninput="App.setCustom('watermarkOpacity', this.value, true)"></div>
+        <div class="field"><label>Taille : ${c.watermarkSize}px</label><input type="range" min="30" max="160" value="${c.watermarkSize}" oninput="App.setCustom('watermarkSize', this.value, true)"></div>
+      </div>
+    </div>
+  `;
+};
+App.setCustom = function(key, value, isLive){
+  this.state.customization[key] = (typeof this.state.customization[key]==="number") ? Number(value) : value;
+  this.save("customization");
+  if(!isLive) this.renderView();
+};
+
+/* ============================================================
+   Taxes & TVA (valeurs par défaut)
+   ============================================================ */
+App.renderTaxes = function(){
+  const t = this.state.taxDefaults;
+  let rows = (t.extraTemplates||[]).map((e,i)=>`
+    <tr>
+      <td>${escapeHtml(e.label)}</td>
+      <td>${e.type==='remise'?'Remise (-)':'Frais / taxe (+)'}</td>
+      <td style="font-family:var(--mono)">${fmtFCFA(e.amount)}</td>
+      <td><button class="icon-btn" onclick="App.removeTaxTemplate(${i})">🗑</button></td>
+    </tr>`).join("");
+  if(!(t.extraTemplates||[]).length) rows = `<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">Aucun frais additionnel par défaut</td></tr>`;
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head"><div><h1>Taxes &amp; TVA</h1><div class="sub">Valeurs par défaut proposées à la création d'une facture — modifiables facture par facture</div></div></div>
+    <div class="card">
+      <h2>TVA</h2>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
+        <input type="checkbox" style="width:auto" ${t.tvaActiveDefault?'checked':''} onchange="App.setTaxDefault('tvaActiveDefault', this.checked)"> Activer la TVA par défaut sur les nouvelles factures
+      </label>
+      <div class="field" style="max-width:200px;margin-top:12px;"><label>Taux de TVA par défaut (%)</label><input type="number" value="${t.tvaTauxDefault}" onchange="App.setTaxDefault('tvaTauxDefault', this.value)"></div>
+    </div>
+    <div class="card">
+      <h2>Frais &amp; remises additionnels par défaut</h2>
+      <table class="data">
+        <thead><tr><th>Libellé</th><th>Type</th><th>Montant</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="grid grid-3" style="margin-top:14px;align-items:end;">
+        <div class="field"><label>Libellé</label><input type="text" id="tax-label" placeholder="Ex : Frais de service"></div>
+        <div class="field"><label>Type</label>
+          <select id="tax-type"><option value="frais">Frais / taxe (+)</option><option value="remise">Remise (-)</option></select>
+        </div>
+        <div class="field"><label>Montant (FCFA)</label><input type="number" id="tax-amount" placeholder="0"></div>
+      </div>
+      <div style="margin-top:12px;"><button class="btn btn-ghost btn-sm" onclick="App.addTaxTemplate()">＋ Ajouter</button></div>
+    </div>
+  `;
+};
+App.setTaxDefault = function(key,value){
+  this.state.taxDefaults[key] = (key==='tvaActiveDefault') ? value : Number(value);
+  this.save("taxDefaults");
+};
+App.addTaxTemplate = function(){
+  const label = document.getElementById("tax-label").value.trim();
+  const type = document.getElementById("tax-type").value;
+  const amount = Number(document.getElementById("tax-amount").value)||0;
+  if(!label){ alert("Le libellé est requis."); return; }
+  this.state.taxDefaults.extraTemplates = this.state.taxDefaults.extraTemplates||[];
+  this.state.taxDefaults.extraTemplates.push({label,type,amount});
+  this.save("taxDefaults");
+  this.renderView();
+};
+App.removeTaxTemplate = function(i){
+  this.state.taxDefaults.extraTemplates.splice(i,1);
+  this.save("taxDefaults");
+  this.renderView();
+};
+
+/* ============================================================
+   Base de données & Sauvegarde
+   ============================================================ */
+App.renderDatabaseSection = async function(){
+  let info = {dbPath:"", backupsDir:""};
+  let lastBackup = null;
+  let backups = [];
+  try{
+    info = await window.dbTools.dbInfo();
+    lastBackup = await window.dbTools.lastBackupDate();
+    backups = await window.dbTools.listBackups();
+  }catch(e){ console.error(e); }
+
+  const lastBackupTxt = lastBackup
+    ? new Date(lastBackup).toLocaleString("fr-FR")
+    : "Aucune sauvegarde pour le moment";
+
+  const backupRows = backups.slice(0,8).map(b=>`
+    <tr>
+      <td>${escapeHtml(b.fileName)}</td>
+      <td>${new Date(b.mtime).toLocaleString("fr-FR")}</td>
+      <td>${(b.size/1024).toFixed(0)} Ko</td>
+    </tr>`).join("");
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div><h1>Base de données &amp; Sauvegarde</h1><div class="sub">Vos données sont enregistrées localement sur cet ordinateur, hors ligne</div></div>
+    </div>
+
+    <div class="card">
+      <h2>État actuel</h2>
+      <div class="hint" style="margin-bottom:6px;">Fichier de la base : <strong>${escapeHtml(info.dbPath)}</strong></div>
+      <div class="hint" style="margin-bottom:6px;">Dossier des sauvegardes : <strong>${escapeHtml(info.backupsDir)}</strong></div>
+      <div class="hint">📅 Dernière sauvegarde : <strong>${lastBackupTxt}</strong></div>
+      <div class="hint" style="margin-top:6px;">🔄 Une sauvegarde automatique est créée avant chaque modification importante (factures) et une fois par jour à l'ouverture du logiciel.</div>
+    </div>
+
+    <div class="card">
+      <h2>Actions</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <button class="btn btn-brass" onclick="App.dbBackupNow()">💾 Sauvegarder maintenant</button>
+        <button class="btn btn-ghost" onclick="App.dbRestoreBackup()">📥 Restaurer une sauvegarde</button>
+        <button class="btn btn-ghost" onclick="App.dbExportCopy()">📤 Exporter une copie de la base</button>
+        <button class="btn btn-ghost" onclick="App.dbExportJSON()">📤 Exporter toutes les données (JSON)</button>
+        <button class="btn btn-ghost" onclick="App.dbImportJSON()">📂 Importer les données (JSON)</button>
+        <button class="btn btn-danger" onclick="App.dbResetDatabase()">🗑️ Réinitialiser la base de données</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sauvegardes récentes</h2>
+      <table class="data">
+        <thead><tr><th>Fichier</th><th>Date</th><th>Taille</th></tr></thead>
+        <tbody>${backupRows || `<tr><td colspan="3"><div class="empty-state"><div class="big">💾</div>Aucune sauvegarde pour le moment.</div></td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+App.dbBackupNow = async function(){
+  try{
+    const res = await window.dbTools.backupNow();
+    toast(`Sauvegarde créée : ${res.fileName}`);
+    this.renderView();
+  }catch(e){ console.error(e); alert("La sauvegarde a échoué."); }
+};
+
+App.dbRestoreBackup = async function(){
+  if(!confirm("Restaurer une sauvegarde remplacera TOUTES les données actuelles par celles de la sauvegarde choisie.\n\nUne sauvegarde de sécurité de la base actuelle sera créée automatiquement avant l'opération.\n\nContinuer ?")) return;
+  try{
+    const res = await window.dbTools.restoreBackupDialog();
+    if(res.canceled) return;
+    alert("Sauvegarde restaurée avec succès. Le logiciel va se recharger.");
+    location.reload();
+  }catch(e){ console.error(e); alert("La restauration a échoué : " + e.message); }
+};
+
+App.dbExportCopy = async function(){
+  try{
+    const res = await window.dbTools.exportCopyDialog();
+    if(res.canceled) return;
+    toast("Copie de la base exportée");
+  }catch(e){ console.error(e); alert("L'export a échoué."); }
+};
+
+App.dbExportJSON = async function(){
+  try{
+    const res = await window.dbTools.exportJSONDialog();
+    if(res.canceled) return;
+    toast("Export JSON terminé");
+  }catch(e){ console.error(e); alert("L'export JSON a échoué."); }
+};
+
+App.dbImportJSON = async function(){
+  if(!confirm("Importer un fichier remplacera TOUTES les données actuelles par celles du fichier choisi.\n\nUne sauvegarde de sécurité sera créée automatiquement avant l'opération.\n\nContinuer ?")) return;
+  try{
+    const res = await window.dbTools.importJSONDialog();
+    if(res.canceled) return;
+    alert("Import terminé avec succès. Le logiciel va se recharger.");
+    location.reload();
+  }catch(e){ console.error(e); alert("L'import a échoué : " + e.message); }
+};
+
+App.dbResetDatabase = async function(){
+  if(!confirm("⚠️ ATTENTION : cette action va supprimer DÉFINITIVEMENT toutes les données (clients, prestations, factures, paramètres).\n\nUne sauvegarde de sécurité sera tout de même créée automatiquement avant.\n\nVoulez-vous vraiment continuer ?")) return;
+  if(!confirm("Deuxième confirmation : êtes-vous VRAIMENT sûr(e) de vouloir réinitialiser toute la base de données ? Cette action est irréversible.")) return;
+  try{
+    await window.dbTools.resetDatabase();
+    alert("La base de données a été réinitialisée. Le logiciel va se recharger.");
+    location.reload();
+  }catch(e){ console.error(e); alert("La réinitialisation a échoué : " + e.message); }
+};
+
+function toast(msg){
+  const el = document.createElement("div");
+  el.textContent = msg;
+  el.style.cssText = "position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;z-index:2000;box-shadow:0 6px 18px rgba(0,0,0,.25);";
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2200);
+}
+
+/* ============================================================
+   Nouvelle facture / édition — cœur de l'application
+   ============================================================ */
+App.newDraftInvoice = function(){
+  const now = new Date();
+  const tax = this.state.taxDefaults;
+  return {
+    id: uid(),
+    numero: pad3(this.state.counter + 1),
+    dateEmission: todayISO(),
+    mois: now.getMonth()+1,
+    annee: now.getFullYear(),
+    clientId: this.state.clients.length ? this.state.clients[0].id : "",
+    objetPrefix: "Gardiennage",
+    objetManual: false,
+    objetCustom: "",
+    lignes: [{id:uid(), designation:"", quantite:1, prixUnitaire:0}],
+    tvaActive: !!tax.tvaActiveDefault,
+    tvaTaux: tax.tvaTauxDefault||18,
+    extraCharges: (tax.extraTemplates||[]).map(e=>({id:uid(), label:e.label, type:e.type, amount:e.amount})),
+    statut: "brouillon",
+    dateCreation: new Date().toISOString(),
+    isNew: true
+  };
+};
+
+App.openInvoice = function(id){
+  const inv = this.state.invoices.find(i=>i.id===id);
+  if(!inv) return;
+  this.draft = JSON.parse(JSON.stringify(inv));
+  this.draft.isNew = false;
+  this.view = "newInvoice";
+  this.renderSidebar();
+  this.renderInvoiceForm();
+};
+
+App.duplicateInvoice = function(id){
+  const inv = this.state.invoices.find(i=>i.id===id);
+  if(!inv) return;
+  const copy = JSON.parse(JSON.stringify(inv));
+  copy.id = uid();
+  copy.numero = pad3(this.state.counter + 1);
+  copy.dateEmission = todayISO();
+  let m = Number(copy.mois)+1, y = Number(copy.annee);
+  if(m > 12){ m = 1; y += 1; }
+  copy.mois = m; copy.annee = y;
+  copy.statut = "brouillon";
+  copy.dateCreation = new Date().toISOString();
+  copy.isNew = true;
+  if(!copy.objetManual){
+    copy.objetCustom = "";
+  }
+  this.draft = copy;
+  this.view = "newInvoice";
+  this.renderSidebar();
+  this.renderInvoiceForm();
+  toast("Facture dupliquée — vérifiez les informations avant d'enregistrer");
+};
+
+function objetTexte(draft){
+  if(draft.objetManual) return draft.objetCustom||"";
+  const moisNom = MOIS_FR[(Number(draft.mois)||1)-1];
+  return `${draft.objetPrefix||""} du mois de ${moisNom} ${draft.annee}`.trim();
+}
+
+App.renderInvoiceForm = function(){
+  if(!this.draft) this.draft = this.newDraftInvoice();
+  const d = this.draft;
+  const clients = this.state.clients;
+  const prestations = this.state.prestations;
+
+  const clientOptions = clients.map(c=>`<option value="${c.id}" ${d.clientId===c.id?'selected':''}>${escapeHtml(c.nom)}</option>`).join("");
+  const monthOptions = MOIS_FR.map((m,i)=>`<option value="${i+1}" ${Number(d.mois)===i+1?'selected':''}>${m}</option>`).join("");
+  const yearNow = new Date().getFullYear();
+  let yearOptions = "";
+  for(let y=yearNow-2; y<=yearNow+3; y++) yearOptions += `<option value="${y}" ${Number(d.annee)===y?'selected':''}>${y}</option>`;
+
+  const prestationDatalist = prestations.map(p=>`<option value="${escapeAttr(p.designation)}" data-price="${p.prixUnitaire}">`).join("");
+
+  const linesRows = d.lignes.map(l=>`
+    <tr>
+      <td><input type="text" list="prestation-list" value="${escapeAttr(l.designation)}" placeholder="Désignation" oninput="App.updateLine('${l.id}','designation',this.value)" onchange="App.autoFillPrice('${l.id}',this.value)"></td>
+      <td class="qty-col"><input type="number" min="0" value="${l.quantite}" oninput="App.updateLine('${l.id}','quantite',this.value)"></td>
+      <td class="price-col"><input type="number" min="0" value="${l.prixUnitaire}" oninput="App.updateLine('${l.id}','prixUnitaire',this.value)"></td>
+      <td class="total-col">${fmtNum((Number(l.quantite)||0)*(Number(l.prixUnitaire)||0))}</td>
+      <td class="del-col"><button class="icon-btn" onclick="App.removeLine('${l.id}')">✕</button></td>
+    </tr>`).join("");
+
+  const extraRows = (d.extraCharges||[]).map(e=>`
+    <tr>
+      <td><input type="text" value="${escapeAttr(e.label)}" oninput="App.updateExtra('${e.id}','label',this.value)"></td>
+      <td style="width:120px">
+        <select onchange="App.updateExtra('${e.id}','type',this.value)">
+          <option value="frais" ${e.type==='frais'?'selected':''}>Frais (+)</option>
+          <option value="remise" ${e.type==='remise'?'selected':''}>Remise (-)</option>
+        </select>
+      </td>
+      <td class="price-col"><input type="number" value="${e.amount}" oninput="App.updateExtra('${e.id}','amount',this.value)"></td>
+      <td class="del-col"><button class="icon-btn" onclick="App.removeExtra('${e.id}')">✕</button></td>
+    </tr>`).join("");
+
+  document.getElementById("main").innerHTML = `
+    <datalist id="prestation-list">${prestationDatalist}</datalist>
+    <div class="page-head">
+      <div><h1>${d.isNew===false?'Modifier la facture':'Nouvelle facture'} N°${d.numero}</h1><div class="sub">Remplissez le formulaire — l'aperçu à droite se met à jour instantanément</div></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="App.goto('invoices')">Annuler</button>
+      </div>
+    </div>
+    <div class="workspace">
+      <div>
+        <div class="card">
+          <h2>Client &amp; période</h2>
+          <div class="grid" style="gap:12px;">
+            <div class="field">
+              <label>Client</label>
+              <select id="f-client" onchange="App.onFieldChange('clientId', this.value)">
+                <option value="">— Sélectionner —</option>
+                ${clientOptions}
+              </select>
+              <div class="hint"><a href="#" onclick="App.openClientModal();return false;" style="color:var(--ink-soft)">＋ Créer un nouveau client</a></div>
+            </div>
+            <div class="grid grid-3">
+              <div class="field"><label>Mois de prestation</label><select id="f-mois" onchange="App.onFieldChange('mois', this.value)">${monthOptions}</select></div>
+              <div class="field"><label>Année</label><select id="f-annee" onchange="App.onFieldChange('annee', this.value)">${yearOptions}</select></div>
+              <div class="field"><label>Date d'émission</label><input type="date" id="f-date" value="${d.dateEmission}" onchange="App.onFieldChange('dateEmission', this.value)"></div>
+            </div>
+            <div class="field"><label>Numéro de facture</label><input type="text" id="f-numero" value="${escapeAttr(d.numero)}" onchange="App.onFieldChange('numero', this.value)"></div>
+            <div class="field">
+              <label style="display:flex;justify-content:space-between;align-items:center;">
+                <span>Objet de la facture</span>
+                <span style="text-transform:none;font-weight:400;font-size:11.5px;">
+                  <label style="display:inline-flex;align-items:center;gap:5px;margin:0;text-transform:none;"><input type="checkbox" style="width:auto" ${d.objetManual?'checked':''} onchange="App.toggleObjetManual(this.checked)"> personnaliser</label>
+                </span>
+              </label>
+              ${d.objetManual
+                ? `<input type="text" id="f-objet-custom" value="${escapeAttr(d.objetCustom)}" oninput="App.updateObjetCustom(this.value)">`
+                : `<div class="grid grid-2">
+                     <input type="text" id="f-objet-prefix" value="${escapeAttr(d.objetPrefix)}" placeholder="Ex : Gardiennage" onchange="App.onFieldChange('objetPrefix', this.value)">
+                     <div style="display:flex;align-items:center;color:var(--text-muted);font-size:12.5px;padding:0 4px;">du mois de ${MOIS_FR[(Number(d.mois)||1)-1]} ${d.annee}</div>
+                   </div>`
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Prestations</h2>
+          <table class="lines-table">
+            <thead><tr><th>Désignation</th><th>Qté</th><th>Prix unit.</th><th>Total</th><th></th></tr></thead>
+            <tbody id="lines-tbody">${linesRows}</tbody>
+          </table>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="App.addLine()">＋ Ajouter une ligne</button>
+        </div>
+
+        <div class="card">
+          <h2>TVA &amp; frais additionnels</h2>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
+            <input type="checkbox" style="width:auto" ${d.tvaActive?'checked':''} onchange="App.onFieldChange('tvaActive', this.checked)"> Appliquer la TVA
+          </label>
+          ${d.tvaActive ? `<div class="field" style="max-width:160px;margin-top:10px;"><label>Taux (%)</label><input type="number" value="${d.tvaTaux}" onchange="App.onFieldChange('tvaTaux', this.value)"></div>` : ""}
+          <table class="lines-table" style="margin-top:14px;">
+            <thead><tr><th>Libellé</th><th>Type</th><th>Montant</th><th></th></tr></thead>
+            <tbody id="extra-tbody">${extraRows}</tbody>
+          </table>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="App.addExtra()">＋ Ajouter un frais / remise</button>
+        </div>
+
+        <div class="card">
+          <h2>Statut &amp; enregistrement</h2>
+          <div class="field" style="max-width:220px;">
+            <label>Statut</label>
+            <select id="f-statut" onchange="App.onFieldChange('statut', this.value)">
+              <option value="brouillon" ${d.statut==='brouillon'?'selected':''}>Brouillon</option>
+              <option value="envoyee" ${d.statut==='envoyee'?'selected':''}>Envoyée</option>
+              <option value="payee" ${d.statut==='payee'?'selected':''}>Payée</option>
+              <option value="impayee" ${d.statut==='impayee'?'selected':''}>Impayée</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+            <button class="btn btn-brass" onclick="App.saveInvoice()">💾 Enregistrer la facture</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-wrap">
+        <div class="preview-toolbar">
+          <button class="btn btn-ghost btn-sm" onclick="App.togglePreviewZoom()" id="zoom-btn">🔍 Zoom</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.printInvoice()">🖨️ Imprimer</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.exportPDF()">⬇ PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.exportWord()">⬇ Word</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.exportExcel()">⬇ Excel</button>
+        </div>
+        <div class="a4-shell" id="a4-shell">
+          <div id="invoice-preview-page" class="zoom-scale"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  this.zoomed = this.zoomed===undefined ? true : this.zoomed;
+  this.updatePreview();
+};
+
+App.togglePreviewZoom = function(){
+  const el = document.getElementById("invoice-preview-page");
+  this.zoomed = !this.zoomed;
+  el.classList.toggle("zoom-scale", this.zoomed);
+  this.adjustPreviewShellHeight();
+};
+
+App.onFieldChange = function(field, value){
+  this.draft[field] = (field==='tvaActive') ? value : value;
+  if(field==='mois' || field==='annee') this.draft[field] = Number(value);
+  if(field==='tvaTaux') this.draft[field] = Number(value);
+  if(['mois','annee','clientId','tvaActive','statut'].includes(field)){
+    this.renderInvoiceForm();
+  } else {
+    this.updatePreview();
+  }
+};
+App.toggleObjetManual = function(checked){
+  this.draft.objetManual = checked;
+  if(checked && !this.draft.objetCustom) this.draft.objetCustom = objetTexte(this.draft);
+  this.renderInvoiceForm();
+};
+App.updateObjetCustom = function(value){
+  this.draft.objetCustom = value;
+  this.updatePreview();
+};
+
+App.updateLine = function(id, field, value){
+  const l = this.draft.lignes.find(x=>x.id===id);
+  if(!l) return;
+  l[field] = (field==='designation') ? value : Number(value);
+  this.updatePreview();
+  this.updateLineTotalDisplay(id);
+};
+App.updateLineTotalDisplay = function(id){
+  const l = this.draft.lignes.find(x=>x.id===id);
+  const rows = document.querySelectorAll("#lines-tbody tr");
+  const idx = this.draft.lignes.findIndex(x=>x.id===id);
+  if(rows[idx]){
+    const cell = rows[idx].querySelector(".total-col");
+    if(cell) cell.textContent = fmtNum((Number(l.quantite)||0)*(Number(l.prixUnitaire)||0));
+  }
+};
+App.autoFillPrice = function(id, designationValue){
+  const p = this.state.prestations.find(pr=>pr.designation===designationValue);
+  if(p){
+    const l = this.draft.lignes.find(x=>x.id===id);
+    if(l && (!l.prixUnitaire || l.prixUnitaire===0)){
+      l.prixUnitaire = p.prixUnitaire;
+      this.renderInvoiceForm();
+    }
+  }
+};
+App.addLine = function(){
+  this.draft.lignes.push({id:uid(), designation:"", quantite:1, prixUnitaire:0});
+  this.renderInvoiceForm();
+};
+App.removeLine = function(id){
+  this.draft.lignes = this.draft.lignes.filter(l=>l.id!==id);
+  this.renderInvoiceForm();
+};
+App.updateExtra = function(id, field, value){
+  const e = this.draft.extraCharges.find(x=>x.id===id);
+  if(!e) return;
+  e[field] = (field==='amount') ? Number(value) : value;
+  this.updatePreview();
+};
+App.addExtra = function(){
+  this.draft.extraCharges = this.draft.extraCharges||[];
+  this.draft.extraCharges.push({id:uid(), label:"Frais", type:"frais", amount:0});
+  this.renderInvoiceForm();
+};
+App.removeExtra = function(id){
+  this.draft.extraCharges = this.draft.extraCharges.filter(e=>e.id!==id);
+  this.renderInvoiceForm();
+};
+
+/* ============================================================
+   Aperçu de la facture (rendu HTML A4)
+   ============================================================ */
+App.updatePreview = function(){
+  const d = this.draft;
+  // Facture déjà enregistrée : on fige son apparence (logo, couleurs, coordonnées)
+  // telle qu'elle était au moment de sa création — elle ne doit jamais changer
+  // automatiquement si les paramètres actuels de l'entreprise changent ensuite.
+  const snap = (d && !d.isNew && d._snapshot) ? d._snapshot : null;
+  const s = snap ? snap.settings : this.state.settings;
+  const c = snap ? snap.customization : this.state.customization;
+  const client = this.state.clients.find(x=>x.id===d.clientId);
+  const totals = computeTotals(d);
+  const inkColor = c.primaryColor || "#1f2f45";
+  const brassColor = c.brassColor || "#a9812f";
+  const fontFamily = c.font==='sans' ? "var(--sans)" : "var(--serif)";
+  const logoPos = c.logoPosition||"left";
+  const logoAlign = logoPos==='center'?'center':(logoPos==='right'?'flex-end':'flex-start');
+
+  const linesHtml = (d.lignes||[]).map(l=>`
+    <tr>
+      <td class="num">${fmtNum(l.quantite)}</td>
+      <td>${escapeHtml(l.designation)||"<span style='color:#bbb'>—</span>"}</td>
+      <td class="num">${fmtFCFA(l.prixUnitaire)}</td>
+      <td class="num">${fmtFCFA((Number(l.quantite)||0)*(Number(l.prixUnitaire)||0))}</td>
+    </tr>`).join("");
+
+  const extraHtml = (d.extraCharges||[]).filter(e=>e.amount).map(e=>`
+    <tr><td class="lbl">${escapeHtml(e.label)}${e.type==='remise'?' (remise)':''}</td><td class="val">${e.type==='remise'?'-':''}${fmtFCFA(e.amount)}</td></tr>
+  `).join("");
+
+  const objet = objetTexte(d);
+  const watermarkHtml = c.watermarkEnabled ? `<div class="inv-watermark" style="opacity:${(c.watermarkOpacity||6)/100};font-size:${c.watermarkSize||90}px;color:${inkColor}">${escapeHtml(c.watermarkText||"")}</div>` : "";
+  const logoHeight = c.logoSize||70;
+
+  document.getElementById("invoice-preview-page").innerHTML = `
+    <div style="--doc-ink:${inkColor};--doc-brass:${brassColor};font-family:${fontFamily};height:100%;">
+      ${watermarkHtml}
+      <div class="inv-content">
+        <div class="inv-header" style="border-color:${inkColor};justify-content:${logoPos==='center'?'center':'space-between'};flex-wrap:wrap;">
+          <div class="logo-block" style="justify-content:${logoAlign};${logoPos==='center'?'width:100%;flex-direction:column;text-align:center;margin-bottom:10px;':''}">
+            ${s.logoDataUrl ? `<img src="${s.logoDataUrl}" style="height:${logoHeight}px;max-width:180px;object-fit:contain;">` : ""}
+            <div>
+              <div class="inv-company-name" style="color:${inkColor}">${escapeHtml(s.companyName||"")}</div>
+              <div class="inv-company-meta">
+                ${s.arrete?`Arrêté ministériel n° ${escapeHtml(s.arrete)}<br>`:""}
+                ${s.ninea?`NINEA : ${escapeHtml(s.ninea)}<br>`:""}
+                ${s.address?`${escapeHtml(s.address)}<br>`:""}
+                ${s.phone?`Tél : ${escapeHtml(s.phone)} `:""}${s.email?` — ${escapeHtml(s.email)}`:""}
+              </div>
+            </div>
+          </div>
+          ${logoPos!=='center' ? `
+          <div class="inv-meta-right">
+            <div class="num">FACTURE N° ${escapeHtml(d.numero)}</div>
+            Dakar, le ${fmtDateFR(d.dateEmission)}
+          </div>` : ""}
+        </div>
+
+        <div class="inv-title-row">
+          <div class="inv-client-box">
+            <div class="lbl">Facturé à</div>
+            <strong>${client?escapeHtml(client.nom):"—"}</strong><br>
+            ${client&&client.adresse?escapeHtml(client.adresse)+"<br>":""}
+            ${client&&client.responsable?"À l'attention de : "+escapeHtml(client.responsable)+"<br>":""}
+            ${client&&client.ninea?"NINEA : "+escapeHtml(client.ninea):""}
+          </div>
+          ${logoPos==='center' ? `<div class="inv-meta-right"><div class="num">FACTURE N° ${escapeHtml(d.numero)}</div>Dakar, le ${fmtDateFR(d.dateEmission)}</div>` : ""}
+        </div>
+
+        <div class="inv-object">Objet : ${escapeHtml(objet)}</div>
+
+        <table class="inv-table">
+          <thead><tr style="background:${inkColor}"><th>Qté</th><th>Désignation</th><th class="num">Prix unitaire</th><th class="num">Prix total</th></tr></thead>
+          <tbody>${linesHtml || '<tr><td colspan="4" style="text-align:center;color:#bbb;padding:14px;">Aucune prestation ajoutée</td></tr>'}</tbody>
+        </table>
+
+        <div class="inv-totals">
+          <table>
+            <tr><td class="lbl">Total HTVA</td><td class="val">${fmtFCFA(totals.htva)}</td></tr>
+            ${extraHtml}
+            ${d.tvaActive ? `<tr><td class="lbl">TVA (${d.tvaTaux}%)</td><td class="val">${fmtFCFA(totals.tva)}</td></tr>` : ""}
+            <tr class="ttc" style="border-color:${inkColor}"><td class="lbl" style="color:${inkColor}">Total TTC</td><td class="val" style="color:${inkColor}">${fmtFCFA(totals.ttc)}</td></tr>
+          </table>
+        </div>
+
+        <div class="inv-words" style="border-color:${brassColor}">Arrêté la présente facture à la somme de : <strong>${montantEnLettres(totals.ttc)}</strong>.</div>
+
+        <div class="inv-sign">
+          <div class="inv-sign-box">
+            ${escapeHtml(s.responsableFonction||"")}<br>${escapeHtml(s.responsableName||"")}
+            <div class="seal" style="border-color:${brassColor};color:${brassColor}">Cachet<br>&amp; signature</div>
+          </div>
+        </div>
+
+        <div class="inv-footer">
+          ${escapeHtml(s.companyName||"")}${s.address?" — "+escapeHtml(s.address):""}${s.phone?" — "+escapeHtml(s.phone):""}${s.email?" — "+escapeHtml(s.email):""}${s.bankInfo?"<br>"+escapeHtml(s.bankInfo):""}
+        </div>
+      </div>
+    </div>
+  `;
+  this.updateTotalsQuickView && this.updateTotalsQuickView(totals);
+  this.adjustPreviewShellHeight();
+};
+
+App.adjustPreviewShellHeight = function(){
+  const el = document.getElementById("invoice-preview-page");
+  const shell = document.getElementById("a4-shell");
+  if(!el || !shell) return;
+  const scale = el.classList.contains("zoom-scale") ? 0.705 : 1;
+  shell.style.height = Math.ceil(el.scrollHeight * scale) + "px";
+};
+
+/* ============================================================
+   Enregistrement de la facture
+   ============================================================ */
+App.saveInvoice = function(){
+  const d = this.draft;
+  if(!d.clientId){ alert("Veuillez sélectionner un client."); return; }
+  if(!d.lignes.length || d.lignes.every(l=>!l.designation)){ alert("Ajoutez au moins une prestation."); return; }
+
+  const idx = this.state.invoices.findIndex(i=>i.id===d.id);
+  const wasNew = idx === -1;
+  delete d.isNew;
+  if(wasNew){
+    this.state.invoices.push(d);
+    const numAsInt = parseInt(d.numero, 10);
+    if(!isNaN(numAsInt) && numAsInt > this.state.counter) this.state.counter = numAsInt;
+  } else {
+    this.state.invoices[idx] = d;
+  }
+  this.save("invoices");
+  this.save("counter");
+  toast(`Facture N°${d.numero} enregistrée`);
+  this.goto("invoices");
+};
+
+/* ============================================================
+   Liste des factures / historique
+   ============================================================ */
+App.renderInvoiceList = function(){
+  const q = (this.invoiceListFilter||"").toLowerCase();
+  let list = this.state.invoices.map(inv=>{
+    const client = this.state.clients.find(c=>c.id===inv.clientId);
+    return {inv, client, totals: computeTotals(inv)};
+  });
+  if(q){
+    list = list.filter(({inv,client}) =>
+      inv.numero.toLowerCase().includes(q) ||
+      (client && client.nom.toLowerCase().includes(q)) ||
+      (inv.dateEmission||"").includes(q)
+    );
+  }
+  list.sort((a,b)=> (b.inv.dateCreation||"").localeCompare(a.inv.dateCreation||""));
+
+  let rows = list.map(({inv,client,totals})=>`
+    <tr>
+      <td><strong>N°${inv.numero}</strong></td>
+      <td>${fmtDateFR(inv.dateEmission)}</td>
+      <td>${client?escapeHtml(client.nom):"—"}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(objetTexte(inv))}</td>
+      <td style="text-align:right;font-family:var(--mono)">${fmtFCFA(totals.htva)}</td>
+      <td style="text-align:right;font-family:var(--mono)">${inv.tvaActive?fmtFCFA(totals.tva):"—"}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;">${fmtFCFA(totals.ttc)}</td>
+      <td>${statusBadge(inv.statut)}</td>
+      <td style="white-space:nowrap;">
+        <button class="icon-btn" title="Ouvrir" onclick="App.openInvoice('${inv.id}')">✎</button>
+        <button class="icon-btn" title="Dupliquer" onclick="App.duplicateInvoice('${inv.id}')">⧉</button>
+        <button class="icon-btn" title="Supprimer" onclick="App.deleteInvoice('${inv.id}')">🗑</button>
+      </td>
+    </tr>`).join("");
+  if(!list.length) rows = `<tr><td colspan="9"><div class="empty-state"><div class="big">▤</div>Aucune facture ${q?"ne correspond à votre recherche":"pour le moment"}.</div></td></tr>`;
+
+  document.getElementById("main").innerHTML = `
+    <div class="page-head">
+      <div><h1>Mes factures</h1><div class="sub">Historique complet, recherche et actions rapides</div></div>
+      <button class="btn btn-brass" onclick="App.goto('newInvoice')">＋ Nouvelle facture</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" placeholder="Rechercher par numéro, client ou date..." value="${escapeAttr(this.invoiceListFilter||"")}" oninput="App.filterInvoices(this.value)">
+    </div>
+    <div class="card">
+      <table class="data">
+        <thead><tr><th>N°</th><th>Date</th><th>Client</th><th>Objet</th><th style="text-align:right">HTVA</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th>Statut</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+};
+App.filterInvoices = function(val){
+  this.invoiceListFilter = val;
+  this.renderInvoiceList();
+};
+App.deleteInvoice = function(id){
+  if(!confirm("Supprimer définitivement cette facture ?")) return;
+  this.state.invoices = this.state.invoices.filter(i=>i.id!==id);
+  this.save("invoices");
+  this.renderInvoiceList();
+};
+
+/* ============================================================
+   Exports : PDF, Word, Excel, Impression
+   ============================================================ */
+App.printInvoice = function(){
+  window.print();
+};
+
+App.exportPDF = async function(){
+  const el = document.getElementById("invoice-preview-page");
+  const wasZoomed = el.classList.contains("zoom-scale");
+  el.classList.remove("zoom-scale");
+  try{
+    const canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:"mm", format:"a4", orientation:"portrait"});
+    const pageWidth = 210, pageHeight = 297;
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight, position = 0;
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while(heightLeft > 0){
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+    pdf.save(`Facture_${this.draft.numero}.pdf`);
+  }catch(e){
+    console.error(e);
+    alert("Erreur lors de la génération du PDF.");
+  } finally {
+    if(wasZoomed) el.classList.add("zoom-scale");
+  }
+};
+
+App.exportWord = function(){
+  const el = document.getElementById("invoice-preview-page");
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"><title>Facture ${this.draft.numero}</title></head>
+    <body>${el.innerHTML}</body></html>`;
+  const blob = new Blob(['\ufeff', html], {type:"application/msword"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `Facture_${this.draft.numero}.doc`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+};
+
+App.exportExcel = function(){
+  const d = this.draft;
+  const client = this.state.clients.find(c=>c.id===d.clientId);
+  const totals = computeTotals(d);
+  const wsData = [
+    ["Facture N°", d.numero],
+    ["Date", fmtDateFR(d.dateEmission)],
+    ["Client", client?client.nom:""],
+    ["Objet", objetTexte(d)],
+    [],
+    ["Désignation","Quantité","Prix unitaire","Prix total"]
+  ];
+  d.lignes.forEach(l=>{
+    wsData.push([l.designation, l.quantite, l.prixUnitaire, (Number(l.quantite)||0)*(Number(l.prixUnitaire)||0)]);
+  });
+  wsData.push([]);
+  wsData.push(["","","Total HTVA", totals.htva]);
+  (d.extraCharges||[]).filter(e=>e.amount).forEach(e=>{
+    wsData.push(["","", e.label + (e.type==='remise'?" (remise)":""), e.type==='remise'?-e.amount:e.amount]);
+  });
+  if(d.tvaActive) wsData.push(["","",`TVA (${d.tvaTaux}%)`, totals.tva]);
+  wsData.push(["","","Total TTC", totals.ttc]);
+  wsData.push([]);
+  wsData.push(["Montant en lettres", montantEnLettres(totals.ttc)]);
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws["!cols"] = [{wch:28},{wch:14},{wch:16},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Facture");
+  XLSX.writeFile(wb, `Facture_${d.numero}.xlsx`);
+};
+
+/* ============================================================
+   Démarrage
+   ============================================================ */
+document.addEventListener("DOMContentLoaded", ()=> App.init());
+
+</script>
+</body>
+</html>
