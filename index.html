@@ -244,41 +244,51 @@ table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
 <div id="modal-root"></div>
 <script>
 /* ============================================================
-   AINA — Mode navigateur (secours) : quand l'application est
-   ouverte dans un simple navigateur (ex : GitHub Pages), et non
-   dans l'app Windows Electron, il n'existe ni window.storage ni
-   window.dbTools (ceux-ci sont normalement fournis par preload.js
-   dans l'app installée). Sans ce bloc, toute donnée saisie était
-   silencieusement perdue à chaque rechargement de la page.
+   AINA — Mode navigateur (cloud) : quand l'application est ouverte
+   dans un simple navigateur (PC ou téléphone), et non dans l'app
+   Windows Electron, il n'existe ni window.storage ni window.dbTools
+   (ceux-ci sont normalement fournis par preload.js dans l'app
+   installée).
 
    Ce bloc reproduit exactement la même interface (mêmes noms de
-   fonctions, mêmes formes de réponse) mais stocke tout dans le
-   localStorage du navigateur : les données restent donc
-   enregistrées automatiquement sur CET ordinateur/navigateur,
-   même après fermeture de l'onglet ou redémarrage.
+   fonctions, mêmes formes de réponse), mais connecte l'application
+   à une vraie base de données dans le cloud (Firebase / Firestore).
+   Résultat : les mêmes données (clients, factures, prestations,
+   paramètres) sont visibles depuis n'importe quel navigateur ou
+   téléphone, dès lors qu'on se connecte avec le même compte.
+
+   Un écran de connexion (email + mot de passe) protège l'accès aux
+   données : personne d'autre que vous ne peut lire ou modifier vos
+   factures.
 
    Si l'app Electron a déjà fourni window.storage (via preload.js),
    ce bloc ne fait rigoureusement rien et laisse l'app telle quelle.
    ============================================================ */
+const AINA_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDTw73Keeqlu_EFM7yIB0sa4jh3PAx6NEY",
+  authDomain: "aina-facturation-27454.firebaseapp.com",
+  projectId: "aina-facturation-27454",
+  storageBucket: "aina-facturation-27454.firebasestorage.app",
+  messagingSenderId: "743781879304",
+  appId: "1:743781879304:web:d405591c635fd3607e4bbd",
+  measurementId: "G-5CZFS8TPG9"
+};
+
+window.__ainaStartApp = function(startFn){ startFn(); }; // remplacé plus bas en mode navigateur
+
 (function(){
   if (window.storage && window.dbTools) return; // déjà dans l'app Electron : ne rien changer
 
-  console.info("[AINA] Mode navigateur détecté : les données seront sauvegardées automatiquement dans ce navigateur (localStorage).");
+  console.info("[AINA] Mode navigateur détecté : connexion à la base de données cloud (Firebase).");
 
-  const LS_PREFIX = "ainaFacturation:";
-  const BACKUPS_META_KEY = "__ainaBackupsMeta__";
-  const BACKUP_PREFIX = "__ainaBackup__:";
   const DATA_KEYS = ["settings","customization","taxDefaults","clients","prestations","invoices","counter"];
 
-  function readMeta(){
-    try{ return JSON.parse(localStorage.getItem(BACKUPS_META_KEY) || "[]"); }catch(e){ return []; }
-  }
-  function writeMeta(list){ localStorage.setItem(BACKUPS_META_KEY, JSON.stringify(list)); }
-
-  function snapshotAllData(){
-    const snap = {};
-    for(const k of DATA_KEYS){ snap[k] = localStorage.getItem(LS_PREFIX + k); }
-    return snap;
+  function loadScript(src){
+    return new Promise((resolve, reject)=>{
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
   }
 
   function downloadFile(fileName, content){
@@ -290,77 +300,93 @@ table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
     setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
   }
 
-  /* ---- window.storage : sauvegarde automatique de chaque champ ---- */
+  function currentUid(){
+    const u = firebase.auth().currentUser;
+    if(!u) throw new Error("Non connecté");
+    return u.uid;
+  }
+  function userDocRef(){ return firebase.firestore().collection("users").doc(currentUid()); }
+
+  /* ---- window.storage : lecture/écriture dans le document Firestore de l'utilisateur ---- */
   window.storage = {
     get: async (key) => {
-      const raw = localStorage.getItem(LS_PREFIX + key);
-      return { key, value: raw === null ? undefined : raw, shared:false };
+      const snap = await userDocRef().get();
+      const data = snap.exists ? snap.data() : {};
+      return { key, value: data[key], shared:false };
     },
     set: async (key, value) => {
-      localStorage.setItem(LS_PREFIX + key, value);
+      await userDocRef().set({ [key]: value }, { merge:true });
       return { key, value, shared:false };
     },
     delete: async (key) => {
-      localStorage.removeItem(LS_PREFIX + key);
+      await userDocRef().set({ [key]: firebase.firestore.FieldValue.delete() }, { merge:true });
       return { key, deleted:true, shared:false };
     }
   };
 
-  /* ---- window.dbTools : sauvegardes / export / import / reset ---- */
+  /* ---- window.dbTools : sauvegardes cloud / export / import / reset ---- */
   window.dbTools = {
     dbInfo: async () => ({
-      dbPath: "Stockage local de ce navigateur (ne quitte pas cet appareil)",
-      backupsDir: "Sauvegardes internes au navigateur — utilisez « Exporter toutes les données (JSON) » pour garder une copie hors du navigateur"
+      dbPath: `Base de données cloud (compte : ${firebase.auth().currentUser?.email || ""})`,
+      backupsDir: "Sauvegardes stockées dans le cloud — accessibles depuis tous vos appareils"
     }),
     lastBackupDate: async () => {
-      const meta = readMeta();
-      return meta.length ? meta[meta.length-1].mtime : null;
+      const q = await userDocRef().collection("backups").orderBy("mtime","desc").limit(1).get();
+      return q.empty ? null : q.docs[0].data().mtime;
     },
     listBackups: async () => {
-      return readMeta().slice().reverse().map(b => ({fileName:b.fileName, mtime:b.mtime, size:b.size}));
+      const q = await userDocRef().collection("backups").orderBy("mtime","desc").limit(20).get();
+      return q.docs.map(d => ({ fileName:d.data().fileName, mtime:d.data().mtime, size:d.data().size }));
     },
     backupNow: async () => {
-      const content = JSON.stringify(snapshotAllData());
+      const snap = await userDocRef().get();
+      const data = snap.exists ? snap.data() : {};
+      const snapshotObj = {};
+      for(const k of DATA_KEYS) snapshotObj[k] = data[k];
+      const content = JSON.stringify(snapshotObj);
       const now = new Date();
-      const stamp = now.toISOString().replace(/[:T]/g,"-").slice(0,16);
-      const fileName = `AINA_Backup_${stamp}.json`;
-      localStorage.setItem(BACKUP_PREFIX+fileName, content);
-      const meta = readMeta();
-      meta.push({fileName, mtime: now.toISOString(), size: content.length});
-      while(meta.length > 20){ // garde au max les 20 dernières pour ne pas saturer le navigateur
-        const old = meta.shift();
-        localStorage.removeItem(BACKUP_PREFIX+old.fileName);
+      const fileName = `AINA_Backup_${now.toISOString().replace(/[:T]/g,"-").slice(0,16)}.json`;
+      await userDocRef().collection("backups").add({ fileName, mtime: now.toISOString(), size: content.length, snapshot: content });
+      // Garde au maximum les 20 dernières sauvegardes pour ne pas saturer le compte gratuit
+      const all = await userDocRef().collection("backups").orderBy("mtime","asc").get();
+      if(all.size > 20){
+        const toDelete = all.docs.slice(0, all.size - 20);
+        for(const d of toDelete) await d.ref.delete();
       }
-      writeMeta(meta);
       return { fileName };
     },
     restoreBackupDialog: async () => {
-      const meta = readMeta();
-      if(!meta.length){ alert("Aucune sauvegarde locale disponible pour le moment."); return {canceled:true}; }
-      const reversed = meta.slice().reverse();
-      const list = reversed.map((b,i)=>`${i+1}. ${b.fileName} (${new Date(b.mtime).toLocaleString("fr-FR")})`).join("\n");
+      const q = await userDocRef().collection("backups").orderBy("mtime","desc").limit(20).get();
+      if(q.empty){ alert("Aucune sauvegarde disponible pour le moment."); return { canceled:true }; }
+      const list = q.docs.map((d,i)=>`${i+1}. ${d.data().fileName} (${new Date(d.data().mtime).toLocaleString("fr-FR")})`).join("\n");
       const choice = prompt("Sauvegardes disponibles :\n\n"+list+"\n\nTapez le numéro de la sauvegarde à restaurer :");
-      if(!choice) return {canceled:true};
-      const picked = reversed[parseInt(choice,10)-1];
-      if(!picked){ alert("Numéro invalide."); return {canceled:true}; }
-      const raw = localStorage.getItem(BACKUP_PREFIX+picked.fileName);
-      if(!raw){ alert("Fichier de sauvegarde introuvable."); return {canceled:true}; }
-      const snap = JSON.parse(raw);
-      for(const k of DATA_KEYS){ if(snap[k] != null) localStorage.setItem(LS_PREFIX+k, snap[k]); }
+      if(!choice) return { canceled:true };
+      const picked = q.docs[parseInt(choice,10)-1];
+      if(!picked){ alert("Numéro invalide."); return { canceled:true }; }
+      const snap = JSON.parse(picked.data().snapshot);
+      const updateObj = {};
+      for(const k of DATA_KEYS) if(snap[k] != null) updateObj[k] = snap[k];
+      await userDocRef().set(updateObj, { merge:true });
       return { canceled:false };
     },
     exportCopyDialog: async () => {
+      const snap = await userDocRef().get();
+      const data = snap.exists ? snap.data() : {};
+      const snapshotObj = {};
+      for(const k of DATA_KEYS) snapshotObj[k] = data[k];
       const fileName = `AINA_Copie_${new Date().toISOString().slice(0,10)}.json`;
-      downloadFile(fileName, JSON.stringify(snapshotAllData(), null, 2));
+      downloadFile(fileName, JSON.stringify(snapshotObj, null, 2));
       return { canceled:false, fileName };
     },
     exportJSONDialog: async () => {
-      const snap = {};
+      const snap = await userDocRef().get();
+      const data = snap.exists ? snap.data() : {};
+      const out = {};
       for(const k of DATA_KEYS){
-        try{ snap[k] = JSON.parse(localStorage.getItem(LS_PREFIX+k) || "null"); }catch(e){ snap[k] = null; }
+        try{ out[k] = JSON.parse(data[k] || "null"); }catch(e){ out[k] = null; }
       }
       const fileName = `AINA_Export_${new Date().toISOString().slice(0,10)}.json`;
-      downloadFile(fileName, JSON.stringify(snap, null, 2));
+      downloadFile(fileName, JSON.stringify(out, null, 2));
       return { canceled:false, fileName };
     },
     importJSONDialog: async () => {
@@ -371,14 +397,16 @@ table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
           const file = input.files && input.files[0];
           if(!file){ resolve({canceled:true}); return; }
           const reader = new FileReader();
-          reader.onload = () => {
+          reader.onload = async () => {
             try{
               const data = JSON.parse(reader.result);
+              const updateObj = {};
               for(const k of DATA_KEYS){
                 if(data[k] !== undefined){
-                  localStorage.setItem(LS_PREFIX+k, typeof data[k]==="string" ? data[k] : JSON.stringify(data[k]));
+                  updateObj[k] = typeof data[k]==="string" ? data[k] : JSON.stringify(data[k]);
                 }
               }
+              await userDocRef().set(updateObj, { merge:true });
               resolve({canceled:false});
             }catch(e){ alert("Fichier JSON invalide."); resolve({canceled:true, error:true}); }
           };
@@ -389,21 +417,136 @@ table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
     },
     resetDatabase: async () => {
       await window.dbTools.backupNow(); // sauvegarde de sécurité automatique avant réinitialisation
-      for(const k of DATA_KEYS) localStorage.removeItem(LS_PREFIX+k);
+      const clearObj = {};
+      for(const k of DATA_KEYS) clearObj[k] = firebase.firestore.FieldValue.delete();
+      await userDocRef().set(clearObj, { merge:true });
       return { ok:true };
     }
+  };
+
+  /* ---- Écran de connexion (email + mot de passe) ---- */
+  function buildLoginOverlay(){
+    const overlay = document.createElement("div");
+    overlay.id = "aina-login-overlay";
+    overlay.innerHTML = `
+      <style>
+        #aina-login-overlay{position:fixed;inset:0;background:#1f2f45;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}
+        #aina-login-card{background:#faf8f4;border-radius:12px;padding:32px;width:340px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+        #aina-login-card h1{font-size:19px;margin:0 0 4px;color:#1f2f45;}
+        #aina-login-card p.sub{font-size:13px;color:#75705f;margin:0 0 20px;}
+        #aina-login-card input{width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;border:1px solid #ddd5c3;border-radius:8px;font-size:14px;}
+        #aina-login-card button{width:100%;padding:11px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;}
+        #aina-login-primary{background:#a9812f;color:#fff;}
+        #aina-login-secondary{background:transparent;color:#1f2f45;text-decoration:underline;}
+        #aina-login-error{color:#a3402a;font-size:13px;margin-bottom:10px;min-height:16px;}
+        #aina-login-loading{color:#75705f;font-size:13px;}
+      </style>
+      <div id="aina-login-card">
+        <h1>AINA — Facturation</h1>
+        <p class="sub">Connectez-vous pour retrouver vos données sur tous vos appareils.</p>
+        <div id="aina-login-loading">Chargement...</div>
+        <div id="aina-login-form" style="display:none;">
+          <div id="aina-login-error"></div>
+          <input id="aina-login-email" type="email" placeholder="Adresse e-mail" autocomplete="username">
+          <input id="aina-login-password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+          <button id="aina-login-primary">Se connecter</button>
+          <button id="aina-login-secondary">Pas encore de compte ? Créer un compte</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function buildLogoutButton(){
+    const btn = document.createElement("button");
+    btn.textContent = "Déconnexion";
+    btn.title = "Se déconnecter de AINA Facturation";
+    btn.style.cssText = "position:fixed;top:10px;right:10px;z-index:9998;background:#1f2f45;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;opacity:.75;";
+    btn.onmouseenter = () => btn.style.opacity = "1";
+    btn.onmouseleave = () => btn.style.opacity = ".75";
+    btn.onclick = () => {
+      if(confirm("Se déconnecter ?")){ firebase.auth().signOut().then(()=>location.reload()); }
+    };
+    document.body.appendChild(btn);
+  }
+
+  window.__ainaStartApp = function(startFn){
+    Promise.all([
+      loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"),
+      loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js")
+    ]).then(() => {
+      firebase.initializeApp(AINA_FIREBASE_CONFIG);
+      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+
+      const overlay = buildLoginOverlay();
+      const loadingEl = overlay.querySelector("#aina-login-loading");
+      const formEl = overlay.querySelector("#aina-login-form");
+      const errorEl = overlay.querySelector("#aina-login-error");
+      const emailEl = overlay.querySelector("#aina-login-email");
+      const passEl = overlay.querySelector("#aina-login-password");
+      const primaryBtn = overlay.querySelector("#aina-login-primary");
+      const secondaryBtn = overlay.querySelector("#aina-login-secondary");
+      let mode = "login"; // ou "signup"
+      let booted = false;
+
+      function showForm(){ loadingEl.style.display = "none"; formEl.style.display = "block"; }
+
+      function friendlyError(code){
+        const map = {
+          "auth/invalid-email": "Adresse e-mail invalide.",
+          "auth/user-not-found": "Aucun compte avec cette adresse e-mail.",
+          "auth/wrong-password": "Mot de passe incorrect.",
+          "auth/email-already-in-use": "Un compte existe déjà avec cette adresse e-mail.",
+          "auth/weak-password": "Le mot de passe doit contenir au moins 6 caractères.",
+          "auth/invalid-credential": "Adresse e-mail ou mot de passe incorrect."
+        };
+        return map[code] || "Une erreur est survenue. Réessayez.";
+      }
+
+      primaryBtn.onclick = async () => {
+        errorEl.textContent = "";
+        const email = emailEl.value.trim();
+        const password = passEl.value;
+        if(!email || !password){ errorEl.textContent = "Veuillez remplir l'e-mail et le mot de passe."; return; }
+        primaryBtn.disabled = true;
+        try{
+          if(mode === "login"){
+            await firebase.auth().signInWithEmailAndPassword(email, password);
+          } else {
+            await firebase.auth().createUserWithEmailAndPassword(email, password);
+          }
+        }catch(e){
+          errorEl.textContent = friendlyError(e.code);
+          primaryBtn.disabled = false;
+        }
+      };
+
+      secondaryBtn.onclick = () => {
+        mode = mode === "login" ? "signup" : "login";
+        primaryBtn.textContent = mode === "login" ? "Se connecter" : "Créer le compte";
+        secondaryBtn.textContent = mode === "login" ? "Pas encore de compte ? Créer un compte" : "Déjà un compte ? Se connecter";
+        errorEl.textContent = "";
+      };
+
+      firebase.auth().onAuthStateChanged((user) => {
+        if(user){
+          overlay.remove();
+          if(!booted){ booted = true; buildLogoutButton(); startFn(); }
+        } else {
+          showForm();
+          primaryBtn.disabled = false;
+        }
+      });
+    }).catch((e) => {
+      console.error("Erreur de chargement Firebase", e);
+      alert("Impossible de charger la connexion en ligne. Vérifiez votre connexion internet et rechargez la page.");
+    });
   };
 
   /* ---- Librairies d'export PDF / Word / Excel, chargées depuis un CDN
      uniquement en mode navigateur (l'app Windows les charge déjà hors ligne
      via preload.js) ---- */
-  function loadScript(src){
-    return new Promise((resolve, reject)=>{
-      const s = document.createElement("script");
-      s.src = src; s.onload = resolve; s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
   if(typeof window.html2canvas === "undefined"){
     loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").catch(()=>{});
   }
@@ -1791,7 +1934,7 @@ App.exportExcel = function(){
 /* ============================================================
    Démarrage
    ============================================================ */
-document.addEventListener("DOMContentLoaded", ()=> App.init());
+document.addEventListener("DOMContentLoaded", ()=> window.__ainaStartApp(()=> App.init()));
 
 </script>
 </body>
