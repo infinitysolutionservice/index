@@ -244,6 +244,178 @@ table.inv-table tbody td.num{text-align:right;font-family:var(--mono);}
 <div id="modal-root"></div>
 <script>
 /* ============================================================
+   AINA — Mode navigateur (secours) : quand l'application est
+   ouverte dans un simple navigateur (ex : GitHub Pages), et non
+   dans l'app Windows Electron, il n'existe ni window.storage ni
+   window.dbTools (ceux-ci sont normalement fournis par preload.js
+   dans l'app installée). Sans ce bloc, toute donnée saisie était
+   silencieusement perdue à chaque rechargement de la page.
+
+   Ce bloc reproduit exactement la même interface (mêmes noms de
+   fonctions, mêmes formes de réponse) mais stocke tout dans le
+   localStorage du navigateur : les données restent donc
+   enregistrées automatiquement sur CET ordinateur/navigateur,
+   même après fermeture de l'onglet ou redémarrage.
+
+   Si l'app Electron a déjà fourni window.storage (via preload.js),
+   ce bloc ne fait rigoureusement rien et laisse l'app telle quelle.
+   ============================================================ */
+(function(){
+  if (window.storage && window.dbTools) return; // déjà dans l'app Electron : ne rien changer
+
+  console.info("[AINA] Mode navigateur détecté : les données seront sauvegardées automatiquement dans ce navigateur (localStorage).");
+
+  const LS_PREFIX = "ainaFacturation:";
+  const BACKUPS_META_KEY = "__ainaBackupsMeta__";
+  const BACKUP_PREFIX = "__ainaBackup__:";
+  const DATA_KEYS = ["settings","customization","taxDefaults","clients","prestations","invoices","counter"];
+
+  function readMeta(){
+    try{ return JSON.parse(localStorage.getItem(BACKUPS_META_KEY) || "[]"); }catch(e){ return []; }
+  }
+  function writeMeta(list){ localStorage.setItem(BACKUPS_META_KEY, JSON.stringify(list)); }
+
+  function snapshotAllData(){
+    const snap = {};
+    for(const k of DATA_KEYS){ snap[k] = localStorage.getItem(LS_PREFIX + k); }
+    return snap;
+  }
+
+  function downloadFile(fileName, content){
+    const blob = new Blob([content], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+  }
+
+  /* ---- window.storage : sauvegarde automatique de chaque champ ---- */
+  window.storage = {
+    get: async (key) => {
+      const raw = localStorage.getItem(LS_PREFIX + key);
+      return { key, value: raw === null ? undefined : raw, shared:false };
+    },
+    set: async (key, value) => {
+      localStorage.setItem(LS_PREFIX + key, value);
+      return { key, value, shared:false };
+    },
+    delete: async (key) => {
+      localStorage.removeItem(LS_PREFIX + key);
+      return { key, deleted:true, shared:false };
+    }
+  };
+
+  /* ---- window.dbTools : sauvegardes / export / import / reset ---- */
+  window.dbTools = {
+    dbInfo: async () => ({
+      dbPath: "Stockage local de ce navigateur (ne quitte pas cet appareil)",
+      backupsDir: "Sauvegardes internes au navigateur — utilisez « Exporter toutes les données (JSON) » pour garder une copie hors du navigateur"
+    }),
+    lastBackupDate: async () => {
+      const meta = readMeta();
+      return meta.length ? meta[meta.length-1].mtime : null;
+    },
+    listBackups: async () => {
+      return readMeta().slice().reverse().map(b => ({fileName:b.fileName, mtime:b.mtime, size:b.size}));
+    },
+    backupNow: async () => {
+      const content = JSON.stringify(snapshotAllData());
+      const now = new Date();
+      const stamp = now.toISOString().replace(/[:T]/g,"-").slice(0,16);
+      const fileName = `AINA_Backup_${stamp}.json`;
+      localStorage.setItem(BACKUP_PREFIX+fileName, content);
+      const meta = readMeta();
+      meta.push({fileName, mtime: now.toISOString(), size: content.length});
+      while(meta.length > 20){ // garde au max les 20 dernières pour ne pas saturer le navigateur
+        const old = meta.shift();
+        localStorage.removeItem(BACKUP_PREFIX+old.fileName);
+      }
+      writeMeta(meta);
+      return { fileName };
+    },
+    restoreBackupDialog: async () => {
+      const meta = readMeta();
+      if(!meta.length){ alert("Aucune sauvegarde locale disponible pour le moment."); return {canceled:true}; }
+      const reversed = meta.slice().reverse();
+      const list = reversed.map((b,i)=>`${i+1}. ${b.fileName} (${new Date(b.mtime).toLocaleString("fr-FR")})`).join("\n");
+      const choice = prompt("Sauvegardes disponibles :\n\n"+list+"\n\nTapez le numéro de la sauvegarde à restaurer :");
+      if(!choice) return {canceled:true};
+      const picked = reversed[parseInt(choice,10)-1];
+      if(!picked){ alert("Numéro invalide."); return {canceled:true}; }
+      const raw = localStorage.getItem(BACKUP_PREFIX+picked.fileName);
+      if(!raw){ alert("Fichier de sauvegarde introuvable."); return {canceled:true}; }
+      const snap = JSON.parse(raw);
+      for(const k of DATA_KEYS){ if(snap[k] != null) localStorage.setItem(LS_PREFIX+k, snap[k]); }
+      return { canceled:false };
+    },
+    exportCopyDialog: async () => {
+      const fileName = `AINA_Copie_${new Date().toISOString().slice(0,10)}.json`;
+      downloadFile(fileName, JSON.stringify(snapshotAllData(), null, 2));
+      return { canceled:false, fileName };
+    },
+    exportJSONDialog: async () => {
+      const snap = {};
+      for(const k of DATA_KEYS){
+        try{ snap[k] = JSON.parse(localStorage.getItem(LS_PREFIX+k) || "null"); }catch(e){ snap[k] = null; }
+      }
+      const fileName = `AINA_Export_${new Date().toISOString().slice(0,10)}.json`;
+      downloadFile(fileName, JSON.stringify(snap, null, 2));
+      return { canceled:false, fileName };
+    },
+    importJSONDialog: async () => {
+      return new Promise((resolve)=>{
+        const input = document.createElement("input");
+        input.type = "file"; input.accept = ".json,application/json";
+        input.onchange = () => {
+          const file = input.files && input.files[0];
+          if(!file){ resolve({canceled:true}); return; }
+          const reader = new FileReader();
+          reader.onload = () => {
+            try{
+              const data = JSON.parse(reader.result);
+              for(const k of DATA_KEYS){
+                if(data[k] !== undefined){
+                  localStorage.setItem(LS_PREFIX+k, typeof data[k]==="string" ? data[k] : JSON.stringify(data[k]));
+                }
+              }
+              resolve({canceled:false});
+            }catch(e){ alert("Fichier JSON invalide."); resolve({canceled:true, error:true}); }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      });
+    },
+    resetDatabase: async () => {
+      await window.dbTools.backupNow(); // sauvegarde de sécurité automatique avant réinitialisation
+      for(const k of DATA_KEYS) localStorage.removeItem(LS_PREFIX+k);
+      return { ok:true };
+    }
+  };
+
+  /* ---- Librairies d'export PDF / Word / Excel, chargées depuis un CDN
+     uniquement en mode navigateur (l'app Windows les charge déjà hors ligne
+     via preload.js) ---- */
+  function loadScript(src){
+    return new Promise((resolve, reject)=>{
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  if(typeof window.html2canvas === "undefined"){
+    loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js").catch(()=>{});
+  }
+  if(typeof window.jspdf === "undefined"){
+    loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js").catch(()=>{});
+  }
+  if(typeof window.XLSX === "undefined"){
+    loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js").catch(()=>{});
+  }
+})();
+
+/* ============================================================
    AINA — Application de facturation
    ============================================================ */
 const MOIS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
